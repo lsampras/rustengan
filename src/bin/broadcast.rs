@@ -55,7 +55,7 @@ impl Node<(), Payload, InjectedPayload> for BroadcastNode {
             // generate gossip events
             // TODO: handle EOF signal
             loop {
-                std::thread::sleep(Duration::from_millis(300));
+                std::thread::sleep(Duration::from_millis(100));
                 if tx.send(Event::Injected(InjectedPayload::Gossip)).is_err() {
                     break;
                 }
@@ -86,7 +86,7 @@ impl Node<(), Payload, InjectedPayload> for BroadcastNode {
                 InjectedPayload::Gossip => {
                     for n in &self.neighborhood {
                         let known_to_n = &self.known[n];
-                        let notify_of = self
+                        let notify_of: HashSet<_> = self
                             .messages
                             .iter()
                             .copied()
@@ -106,17 +106,19 @@ impl Node<(), Payload, InjectedPayload> for BroadcastNode {
                         //         already_known.len() as u32,
                         //     )
                         // }));
-                        Message {
-                            src: self.node.clone(),
-                            dst: n.clone(),
-                            body: Body {
-                                id: None,
-                                in_reply_to: None,
-                                payload: Payload::Gossip { seen: notify_of },
-                            },
+                        if !notify_of.is_empty() {
+                            Message {
+                                src: self.node.clone(),
+                                dst: n.clone(),
+                                body: Body {
+                                    id: None,
+                                    in_reply_to: None,
+                                    payload: Payload::Gossip { seen: notify_of },
+                                },
+                            }
+                            .send(&mut *output)
+                            .with_context(|| format!("gossip to {}", n))?;
                         }
-                        .send(&mut *output)
-                        .with_context(|| format!("gossip to {}", n))?;
                     }
                 }
             },
@@ -154,6 +156,7 @@ impl Node<(), Payload, InjectedPayload> for BroadcastNode {
                         self.neighborhood = topology
                             .remove(&self.node)
                             .unwrap_or_else(|| panic!("no topology given for node {}", self.node));
+                        eprintln!("({}, {:?})", self.node, self.neighborhood);
                         reply.body.payload = Payload::TopologyOk;
                         reply.send(&mut *output).context("reply to topology")?;
                     }
