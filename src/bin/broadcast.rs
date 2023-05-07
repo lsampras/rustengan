@@ -55,7 +55,9 @@ impl Node<(), Payload, InjectedPayload> for BroadcastNode {
             // generate gossip events
             // TODO: handle EOF signal
             loop {
-                std::thread::sleep(Duration::from_millis(150));
+                // Controlling the gossip duration controls the average latency & msgs-per-op
+                // Gossip interval ∝ broadcast latency ∝ 1/msgs-per-op
+                std::thread::sleep(Duration::from_millis(200));
                 if tx.send(Event::Injected(InjectedPayload::Gossip)).is_err() {
                     break;
                 }
