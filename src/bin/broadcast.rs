@@ -1,4 +1,4 @@
-use rustengan::*;
+use rustengan::{*, neighborhood::NeighborHood};
 
 use anyhow::Context;
 // use rand::prelude::*;
@@ -42,7 +42,7 @@ struct BroadcastNode {
     id: usize,
     messages: HashSet<usize>,
     known: HashMap<String, HashSet<usize>>,
-    neighborhood: Vec<String>,
+    neighborhood: NeighborHood,
 }
 
 impl Node<(), Payload, InjectedPayload> for BroadcastNode {
@@ -55,7 +55,7 @@ impl Node<(), Payload, InjectedPayload> for BroadcastNode {
             // generate gossip events
             // TODO: handle EOF signal
             loop {
-                std::thread::sleep(Duration::from_millis(100));
+                std::thread::sleep(Duration::from_millis(150));
                 if tx.send(Event::Injected(InjectedPayload::Gossip)).is_err() {
                     break;
                 }
@@ -71,7 +71,7 @@ impl Node<(), Payload, InjectedPayload> for BroadcastNode {
                 .into_iter()
                 .map(|nid| (nid, HashSet::new()))
                 .collect(),
-            neighborhood: Vec::new(),
+            neighborhood: NeighborHood::default(),
         })
     }
 
@@ -84,7 +84,7 @@ impl Node<(), Payload, InjectedPayload> for BroadcastNode {
             Event::EOF => {}
             Event::Injected(payload) => match payload {
                 InjectedPayload::Gossip => {
-                    for n in &self.neighborhood {
+                    for n in &self.neighborhood.get_neighbours(&self.node) {
                         let known_to_n = &self.known[n];
                         let notify_of: HashSet<_> = self
                             .messages
@@ -106,7 +106,7 @@ impl Node<(), Payload, InjectedPayload> for BroadcastNode {
                         //         already_known.len() as u32,
                         //     )
                         // }));
-                        if !notify_of.is_empty() {
+                        if !notify_of.is_empty() || n.eq(&self.node) {
                             Message {
                                 src: self.node.clone(),
                                 dst: n.clone(),
@@ -152,10 +152,8 @@ impl Node<(), Payload, InjectedPayload> for BroadcastNode {
                         };
                         reply.send(&mut *output).context("reply to read")?;
                     }
-                    Payload::Topology { mut topology } => {
-                        self.neighborhood = topology
-                            .remove(&self.node)
-                            .unwrap_or_else(|| panic!("no topology given for node {}", self.node));
+                    Payload::Topology { topology } => {
+                        self.neighborhood = NeighborHood::create(topology);
                         eprintln!("({}, {:?})", self.node, self.neighborhood);
                         reply.body.payload = Payload::TopologyOk;
                         reply.send(&mut *output).context("reply to topology")?;
@@ -169,5 +167,8 @@ impl Node<(), Payload, InjectedPayload> for BroadcastNode {
 }
 
 fn main() -> anyhow::Result<()> {
-    main_loop::<_, BroadcastNode, _, _>(())
+    main_loop::<_, BroadcastNode, _, _>(()).map_err(|er| {
+        eprintln!("received error {er:?}");
+        er
+    })
 }

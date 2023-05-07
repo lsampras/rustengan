@@ -1,3 +1,5 @@
+pub mod neighborhood;
+
 use anyhow::Context;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::io::{BufRead, StdoutLock, Write};

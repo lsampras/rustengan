@@ -20,6 +20,9 @@ broadcast-efficiency-test: compile
 broadcast-efficiency-bench: compile
 	maelstrom test -w broadcast --bin target/debug/broadcast --node-count 25 --time-limit 20 --rate 100 --latency 100
 
+logs:
+	cat store/latest/node-logs/*
+
 web:
 	maelstrom serve
 
